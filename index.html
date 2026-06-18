@@ -1,0 +1,1234 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Controle de Pavimento — Ordens de Serviço</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+      /* ============================================================
+     CONFIGURAÇÃO — preencha com os dados do seu projeto Supabase
+     (Settings > API). Sem isso o app abre, mas não conecta.
+     ============================================================ */
+      :root {
+        --asfalto: #26251f;
+        --concreto: #f2f0eb;
+        --carta: #ffffff;
+        --superficie: #faf9f6;
+        --tinta: #1f1e1b;
+        --tinta2: #6b6a63;
+        --tinta3: #9a988f;
+        --linha: #e4e1d9;
+        --linha2: #d8d4c8;
+        --vis: #e8721c;
+        --vis-escuro: #b85410;
+        --pend-bg: #fbe9e7;
+        --pend-tx: #8e2a1f;
+        --pend-bd: #e6b4ab;
+        --env-bg: #fbefd9;
+        --env-tx: #7a4d06;
+        --env-bd: #e8cf95;
+        --exec-bg: #e6f2e1;
+        --exec-tx: #1e5320;
+        --exec-bd: #b4d4a8;
+        --vencido: #c0392b;
+        --perto: #b8730a;
+        --raio: 10px;
+        --mono:
+          ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        --sans:
+          system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--concreto);
+        color: var(--tinta);
+        font-family: var(--sans);
+        font-size: 15px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      button {
+        font-family: inherit;
+        cursor: pointer;
+      }
+      input,
+      select,
+      textarea {
+        font-family: inherit;
+        font-size: 15px;
+      }
+
+      /* faixa hi-vis no topo, como sinalização de obra */
+      .vis-bar {
+        height: 6px;
+        background: repeating-linear-gradient(
+          45deg,
+          var(--vis) 0 14px,
+          var(--asfalto) 14px 28px
+        );
+      }
+
+      header {
+        background: var(--asfalto);
+        color: #f4f2ec;
+        padding: 18px 20px 16px;
+      }
+      .head-row {
+        max-width: 1180px;
+        margin: 0 auto;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 19px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+      }
+      header .sub {
+        color: #b9b6ab;
+        font-size: 13px;
+        margin-top: 2px;
+      }
+      .counters {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .counter {
+        background: #34332b;
+        border: 1px solid #45443a;
+        border-radius: 8px;
+        padding: 7px 12px;
+        min-width: 78px;
+      }
+      .counter b {
+        display: block;
+        font-size: 20px;
+        font-weight: 600;
+        font-family: var(--mono);
+        line-height: 1.1;
+      }
+      .counter span {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: #b9b6ab;
+      }
+      .counter.pend b {
+        color: #f0a99e;
+      }
+      .counter.env b {
+        color: #e8c987;
+      }
+      .counter.exec b {
+        color: #a7d49a;
+      }
+
+      main {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+      .toolbar .search {
+        flex: 1;
+        min-width: 200px;
+        position: relative;
+      }
+      .toolbar input[type="search"],
+      .toolbar select {
+        width: 100%;
+        padding: 9px 12px;
+        border: 1px solid var(--linha2);
+        border-radius: 8px;
+        background: var(--carta);
+        color: var(--tinta);
+      }
+      .toolbar select {
+        width: auto;
+        min-width: 130px;
+      }
+      .btn {
+        border: 1px solid var(--linha2);
+        background: var(--carta);
+        color: var(--tinta);
+        padding: 9px 14px;
+        border-radius: 8px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+      .btn:hover {
+        border-color: var(--tinta3);
+      }
+      .btn-primary {
+        background: var(--vis);
+        border-color: var(--vis);
+        color: #fff;
+      }
+      .btn-primary:hover {
+        background: var(--vis-escuro);
+        border-color: var(--vis-escuro);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 14px;
+      }
+
+      .card {
+        background: var(--carta);
+        border: 1px solid var(--linha);
+        border-radius: var(--raio);
+        padding: 14px 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        position: relative;
+      }
+      .card.vencido-mark {
+        border-left: 4px solid var(--vencido);
+      }
+      .card .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .cod {
+        font-family: var(--mono);
+        font-weight: 600;
+        font-size: 15px;
+        letter-spacing: -0.3px;
+      }
+      .at {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--tinta2);
+        margin-top: 1px;
+      }
+      .badge {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 4px 9px;
+        border-radius: 999px;
+        border: 1px solid;
+        white-space: nowrap;
+      }
+      .badge.pend {
+        background: var(--pend-bg);
+        color: var(--pend-tx);
+        border-color: var(--pend-bd);
+      }
+      .badge.env {
+        background: var(--env-bg);
+        color: var(--env-tx);
+        border-color: var(--env-bd);
+      }
+      .badge.exec {
+        background: var(--exec-bg);
+        color: var(--exec-tx);
+        border-color: var(--exec-bd);
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .chip {
+        font-size: 12px;
+        background: var(--superficie);
+        border: 1px solid var(--linha);
+        border-radius: 6px;
+        padding: 3px 8px;
+        color: var(--tinta2);
+      }
+      .chip b {
+        color: var(--tinta);
+        font-weight: 600;
+      }
+      .cidade {
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .venc {
+        font-size: 12.5px;
+        color: var(--tinta2);
+      }
+      .rua-line {
+        font-size: 13px;
+        color: var(--tinta2);
+        margin-top: -2px;
+      }
+      .venc.vencido {
+        color: var(--vencido);
+        font-weight: 600;
+      }
+      .venc.perto {
+        color: var(--perto);
+        font-weight: 600;
+      }
+      .obs {
+        font-size: 12.5px;
+        color: var(--tinta2);
+        border-top: 1px dashed var(--linha);
+        padding-top: 8px;
+      }
+      .medidas {
+        font-family: var(--mono);
+        font-size: 12.5px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        border-top: 1px solid var(--linha);
+        padding-top: 10px;
+      }
+      .actions .btn {
+        padding: 7px 11px;
+        font-size: 13px;
+        flex: 1;
+        text-align: center;
+      }
+      .actions a.btn {
+        text-decoration: none;
+        color: inherit;
+        display: inline-block;
+      }
+      .pdf-yes {
+        color: var(--exec-tx);
+        border-color: var(--exec-bd);
+        background: var(--exec-bg);
+      }
+      .btn.wa {
+        background: #25d366;
+        border-color: #25d366;
+        color: #0a3d1e;
+        font-weight: 600;
+      }
+      .btn.wa:hover {
+        background: #1fb855;
+        border-color: #1fb855;
+      }
+
+      .empty {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--tinta2);
+      }
+      .empty h2 {
+        color: var(--tinta);
+        font-weight: 600;
+        font-size: 18px;
+        margin: 0 0 6px;
+      }
+
+      .banner {
+        background: #fff7ed;
+        border: 1px solid #f0c98a;
+        color: #7a4d06;
+        border-radius: 10px;
+        padding: 14px 16px;
+        margin: 0 0 18px;
+        font-size: 14px;
+      }
+      .banner code {
+        font-family: var(--mono);
+        background: #fbe9cf;
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+
+      /* modal */
+      .overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(31, 30, 27, 0.5);
+        display: none;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 24px 14px;
+        overflow: auto;
+        z-index: 50;
+      }
+      .overlay.open {
+        display: flex;
+      }
+      .modal {
+        background: var(--carta);
+        border-radius: 14px;
+        width: 100%;
+        max-width: 560px;
+        padding: 22px;
+        border: 1px solid var(--linha);
+      }
+      .modal h2 {
+        margin: 0 0 4px;
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .modal .hint {
+        color: var(--tinta2);
+        font-size: 13px;
+        margin: 0 0 16px;
+      }
+      .field {
+        margin-bottom: 13px;
+      }
+      .field label {
+        display: block;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--tinta2);
+        margin-bottom: 5px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+      .field input,
+      .field select,
+      .field textarea {
+        width: 100%;
+        padding: 9px 11px;
+        border: 1px solid var(--linha2);
+        border-radius: 8px;
+        background: var(--superficie);
+        color: var(--tinta);
+      }
+      .field textarea {
+        resize: vertical;
+        min-height: 60px;
+        font-family: var(--mono);
+        font-size: 13.5px;
+      }
+      .row2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 18px;
+        flex-wrap: wrap;
+      }
+      .btn-danger {
+        color: var(--pend-tx);
+        border-color: var(--pend-bd);
+        background: var(--pend-bg);
+        margin-right: auto;
+      }
+
+      .toast {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--asfalto);
+        color: #fff;
+        padding: 11px 18px;
+        border-radius: 10px;
+        font-size: 14px;
+        z-index: 80;
+        opacity: 0;
+        transition: opacity 0.25s;
+        pointer-events: none;
+      }
+      .toast.show {
+        opacity: 1;
+      }
+
+      @media (max-width: 560px) {
+        .row2 {
+          grid-template-columns: 1fr;
+        }
+        .counters {
+          width: 100%;
+        }
+        .counter {
+          flex: 1;
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="vis-bar"></div>
+    <header>
+      <div class="head-row">
+        <div>
+          <h1>Controle de Pavimento</h1>
+          <div class="sub">Ordens de serviço — pendentes e executadas</div>
+        </div>
+        <div class="counters" id="counters"></div>
+      </div>
+    </header>
+
+    <main>
+      <div id="config-banner"></div>
+
+      <div class="toolbar">
+        <div class="search">
+          <input
+            type="search"
+            id="q"
+            placeholder="Buscar por código, AT, cidade, observação…"
+          />
+        </div>
+        <select id="f-status">
+          <option value="">Todos os status</option>
+          <option value="Pendente">Pendente</option>
+          <option value="Enviado">Enviado</option>
+          <option value="Executado">Executado</option>
+        </select>
+        <select id="f-cidade">
+          <option value="">Todas as cidades</option>
+        </select>
+        <select id="f-material">
+          <option value="">Todo tipo de serviço</option>
+        </select>
+        <button class="btn" id="btn-import">Importar colando</button>
+        <button class="btn btn-primary" id="btn-new">+ Nova OS</button>
+      </div>
+
+      <div id="list"></div>
+    </main>
+
+    <!-- modal: adicionar / editar -->
+    <div class="overlay" id="modal-edit">
+      <div class="modal">
+        <h2 id="modal-title">Nova ordem de serviço</h2>
+        <p class="hint">
+          Datas no formato dd/mm/aaaa. Anexe o PDF depois de salvar.
+        </p>
+        <input type="hidden" id="f-id" />
+        <div class="row2">
+          <div class="field">
+            <label>Código OC</label
+            ><input id="f-cod" placeholder="ES26-000000" />
+          </div>
+          <div class="field">
+            <label>AT (atendimento)</label
+            ><input id="f-at" placeholder="000000" />
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Cidade</label><input id="f-cidade-in" list="dl-cidade" />
+          </div>
+          <div class="field">
+            <label>Tipo de Serviço</label
+            ><input id="f-material-in" list="dl-material" />
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Rua</label
+            ><input id="f-rua" placeholder="ex.: R. Vandy Alves, 120" />
+          </div>
+          <div class="field">
+            <label>Exec. manutenção</label
+            ><input id="f-execman" placeholder="dd/mm/aaaa" />
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Status</label>
+            <select id="f-status-in">
+              <option>Pendente</option>
+              <option>Enviado</option>
+              <option>Executado</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Equipe / responsável</label
+            ><input id="f-equipe" placeholder="ex.: Márcio" />
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Data execução</label
+            ><input id="f-dataexec" placeholder="dd/mm/aaaa" />
+          </div>
+          <div class="field">
+            <label>Medidas</label
+            ><input id="f-medidas" placeholder="1,20 x 0,60" />
+          </div>
+        </div>
+        <div class="field">
+          <label>Observações</label><textarea id="f-obs"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-danger" id="btn-delete" style="display: none">
+            Excluir
+          </button>
+          <button class="btn" id="btn-cancel">Cancelar</button>
+          <button class="btn btn-primary" id="btn-save">Salvar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- modal: importar colando -->
+    <div class="overlay" id="modal-import">
+      <div class="modal">
+        <h2>Importar colando da planilha</h2>
+        <p class="hint">
+          Copie as linhas da sua planilha (Ctrl+C) e cole abaixo. Ordem das
+          colunas: Exec.Man · Cód OC · AT · Vencimento · Execução Pav · Status ·
+          Cidade · Material · Observações.
+        </p>
+        <div class="field">
+          <textarea
+            id="import-text"
+            style="min-height: 160px"
+            placeholder="cole aqui…"
+          ></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn" id="import-cancel">Cancelar</button>
+          <button class="btn btn-primary" id="import-go">Importar</button>
+        </div>
+      </div>
+    </div>
+
+    <datalist id="dl-cidade"></datalist>
+    <datalist id="dl-material"></datalist>
+    <input
+      type="file"
+      id="pdf-input"
+      accept="application/pdf"
+      style="display: none"
+    />
+    <div class="toast" id="toast"></div>
+
+    <script>
+      // ===========================================================================
+      //  PREENCHA AQUI  (Supabase > Settings > API)
+      // ===========================================================================
+      const SUPABASE_URL = "https://glgzwxkfcakrvdvdhosb.supabase.co"; // ex.: https://xxxx.supabase.co
+      const SUPABASE_ANON = "sb_publishable_IMMY8ypPkXI6EbSQSMvWLg_afLs4OjX"; // chave pública (anon/public)
+      const BUCKET = "pdfs-os";
+      const TABELA = "ordens";
+      // ===========================================================================
+
+      const CIDADES_SUGERIDAS = [
+        "PATOS",
+        "PEDRA BRANCA",
+        "TEIXEIRA",
+        "MANAÍRA",
+        "SANTA TEREZINHA",
+        "TAVARES",
+        "TAPEROÁ",
+        "EMAS",
+        "ÁGUA BRANCA",
+        "DESTERRO",
+        "IMACULADA",
+        "S. GARROTES",
+        "SANTANA DOS GARROTES",
+        "S. J. DO BONFIM",
+        "CACIMBA DE AREIA",
+        "CATINGUEIRA",
+        "SÃO MAMEDE",
+        "JURU",
+        "CACIMBAS",
+        "ITAPORANGA",
+        "SANTA LUZIA",
+      ];
+      const MATERIAIS_SUGERIDOS = [
+        "CALÇADA",
+        "CALÇAMENTO",
+        "ASFALTO",
+        "PARALELO",
+        "CALÇAMENTO + ASFALTO",
+        "PARALELO + CALÇADA",
+        "FALTA ASFALTO",
+        "PAV INTERLIGAÇÃO",
+      ];
+
+      let db = null,
+        ordens = [],
+        editingPdfFor = null;
+      const $ = (s) => document.querySelector(s);
+
+      const configOK =
+        SUPABASE_URL.startsWith("http") && SUPABASE_ANON.length > 20;
+      if (configOK) db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+      if (typeof pdfjsLib !== "undefined")
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+      // ---------- helpers de data ----------
+      function brToISO(s) {
+        if (!s) return null;
+        s = s.trim();
+        const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+        if (!m) return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+        let [_, d, mo, y] = m;
+        if (y.length === 2) y = "20" + y;
+        return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+      }
+      function isoToBR(s) {
+        if (!s) return "";
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
+      }
+      function diasAte(iso) {
+        if (!iso) return null;
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        const d = new Date(iso + "T00:00:00");
+        return Math.round((d - hoje) / 86400000);
+      }
+      function toast(msg) {
+        const t = $("#toast");
+        t.textContent = msg;
+        t.classList.add("show");
+        clearTimeout(t._t);
+        t._t = setTimeout(() => t.classList.remove("show"), 2600);
+      }
+
+      // ---------- carregar ----------
+      async function load() {
+        if (!configOK) {
+          $("#config-banner").innerHTML =
+            `<div class="banner">⚙️ Falta configurar. Abra o arquivo <code>index.html</code> e preencha
+       <code>SUPABASE_URL</code> e <code>SUPABASE_ANON</code> lá no início do script,
+       depois suba de novo no Netlify.</div>`;
+          render();
+          return;
+        }
+        const { data, error } = await db
+          .from(TABELA)
+          .select("*")
+          .order("vencimento", { ascending: true, nullsFirst: false });
+        if (error) {
+          toast("Erro ao carregar: " + error.message);
+          return;
+        }
+        ordens = data || [];
+        popularFiltros();
+        render();
+      }
+
+      function popularFiltros() {
+        const cidades = [
+          ...new Set([
+            ...CIDADES_SUGERIDAS,
+            ...ordens.map((o) => o.cidade).filter(Boolean),
+          ]),
+        ].sort();
+        const mats = [
+          ...new Set([
+            ...MATERIAIS_SUGERIDOS,
+            ...ordens.map((o) => o.material).filter(Boolean),
+          ]),
+        ].sort();
+        $("#dl-cidade").innerHTML = cidades
+          .map((c) => `<option value="${c}">`)
+          .join("");
+        $("#dl-material").innerHTML = mats
+          .map((m) => `<option value="${m}">`)
+          .join("");
+        const fc = $("#f-cidade"),
+          fm = $("#f-material");
+        const selC = fc.value,
+          selM = fm.value;
+        fc.innerHTML =
+          `<option value="">Todas as cidades</option>` +
+          cidades.map((c) => `<option>${c}</option>`).join("");
+        fm.innerHTML =
+          `<option value="">Todo tipo de serviço</option>` +
+          mats.map((m) => `<option>${m}</option>`).join("");
+        fc.value = selC;
+        fm.value = selM;
+      }
+
+      // ---------- render ----------
+      function render() {
+        const q = $("#q").value.trim().toLowerCase();
+        const fs = $("#f-status").value,
+          fc = $("#f-cidade").value,
+          fm = $("#f-material").value;
+        const vis = ordens.filter((o) => {
+          if (fs && o.status !== fs) return false;
+          if (fc && o.cidade !== fc) return false;
+          if (fm && o.material !== fm) return false;
+          if (q) {
+            const blob = [
+              o.cod_oc,
+              o.atendimento,
+              o.cidade,
+              o.material,
+              o.observacoes,
+              o.equipe,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+            if (!blob.includes(q)) return false;
+          }
+          return true;
+        });
+
+        // contadores (sobre o total, não o filtro)
+        const c = { Pendente: 0, Enviado: 0, Executado: 0 };
+        ordens.forEach((o) => {
+          if (c[o.status] !== undefined) c[o.status]++;
+        });
+        $("#counters").innerHTML = `
+    <div class="counter pend"><b>${c.Pendente}</b><span>Pendentes</span></div>
+    <div class="counter env"><b>${c.Enviado}</b><span>Enviadas</span></div>
+    <div class="counter exec"><b>${c.Executado}</b><span>Executadas</span></div>`;
+
+        const list = $("#list");
+        if (!vis.length) {
+          list.innerHTML = `<div class="empty"><h2>Nada por aqui</h2>
+      <p>${ordens.length ? "Nenhuma OS bate com o filtro." : "Cadastre uma OS ou use “Importar colando”."}</p></div>`;
+          return;
+        }
+        list.innerHTML = `<div class="grid">${vis.map(card).join("")}</div>`;
+      }
+
+      function card(o) {
+        const cls =
+          o.status === "Executado"
+            ? "exec"
+            : o.status === "Enviado"
+              ? "env"
+              : "pend";
+        const d = o.status !== "Executado" ? diasAte(o.vencimento) : null;
+        let vencCls = "",
+          vencTxt = o.vencimento
+            ? "Vence " + isoToBR(o.vencimento)
+            : "Sem vencimento";
+        if (d !== null) {
+          if (d < 0) {
+            vencCls = "vencido";
+            vencTxt = `Vencida há ${Math.abs(d)}d`;
+          } else if (d <= 3) {
+            vencCls = "perto";
+            vencTxt = `Vence em ${d}d`;
+          }
+        }
+        const pdf = o.pdf_url
+          ? `<a class="btn pdf-yes" href="${o.pdf_url}" target="_blank" rel="noopener">📄 Ver PDF</a>
+       <button class="btn" onclick="removerPdf('${o.id}')">Remover PDF</button>`
+          : `<button class="btn" onclick="anexarPdf('${o.id}')">📎 Anexar PDF</button>`;
+        return `<div class="card ${vencCls === "vencido" ? "vencido-mark" : ""}">
+    <div class="top">
+      <div>
+        <div class="cod">${o.cod_oc || "—"}</div>
+        <div class="at">AT ${o.atendimento || "—"}</div>
+      </div>
+      <span class="badge ${cls}">${o.status || "Pendente"}</span>
+    </div>
+    <div class="cidade">${o.cidade || "—"}</div>
+    ${o.rua ? `<div class="rua-line">📍 ${o.rua}</div>` : ""}
+    <div class="meta">
+      ${o.material ? `<span class="chip"><b>${o.material}</b></span>` : ""}
+      ${o.equipe ? `<span class="chip">👷 ${o.equipe}</span>` : ""}
+      ${o.data_execucao ? `<span class="chip">✓ ${isoToBR(o.data_execucao)}</span>` : ""}
+    </div>
+    <div class="venc ${vencCls}">${vencTxt}</div>
+    ${o.medidas ? `<div class="meta"><span class="chip medidas">Medidas: <b>${o.medidas}</b></span></div>` : ""}
+    ${o.observacoes ? `<div class="obs">${o.observacoes}</div>` : ""}
+    <div class="actions">
+      ${o.status !== "Executado" ? `<button class="btn wa" onclick="whatsapp('${o.id}')">📲 WhatsApp</button>` : ""}
+      ${pdf}
+      ${o.status !== "Executado" ? `<button class="btn" onclick="marcarExecutado('${o.id}')">✓ Executado</button>` : ""}
+      <button class="btn" onclick="editar('${o.id}')">Editar</button>
+    </div>
+  </div>`;
+      }
+
+      // ---------- modal editar ----------
+      function abrirModal() {
+        $("#modal-edit").classList.add("open");
+      }
+      function fecharModal() {
+        $("#modal-edit").classList.remove("open");
+      }
+
+      function novaOS() {
+        $("#modal-title").textContent = "Nova ordem de serviço";
+        [
+          "f-id",
+          "f-cod",
+          "f-at",
+          "f-cidade-in",
+          "f-material-in",
+          "f-rua",
+          "f-execman",
+          "f-equipe",
+          "f-dataexec",
+          "f-medidas",
+          "f-obs",
+        ].forEach((id) => ($("#" + id).value = ""));
+        $("#f-status-in").value = "Pendente";
+        $("#btn-delete").style.display = "none";
+        abrirModal();
+      }
+      function editar(id) {
+        const o = ordens.find((x) => x.id === id);
+        if (!o) return;
+        $("#modal-title").textContent = "Editar OS";
+        $("#f-id").value = o.id;
+        $("#f-cod").value = o.cod_oc || "";
+        $("#f-at").value = o.atendimento || "";
+        $("#f-cidade-in").value = o.cidade || "";
+        $("#f-material-in").value = o.material || "";
+        $("#f-rua").value = o.rua || "";
+        $("#f-execman").value = isoToBR(o.exec_man);
+        $("#f-status-in").value = o.status || "Pendente";
+        $("#f-equipe").value = o.equipe || "";
+        $("#f-dataexec").value = isoToBR(o.data_execucao);
+        $("#f-medidas").value = o.medidas || "";
+        $("#f-obs").value = o.observacoes || "";
+        $("#btn-delete").style.display = "inline-block";
+        abrirModal();
+      }
+      function marcarExecutado(id) {
+        editar(id);
+        $("#modal-title").textContent = "Marcar como executada";
+        $("#f-status-in").value = "Executado";
+        if (!$("#f-dataexec").value) {
+          const h = new Date();
+          $("#f-dataexec").value =
+            `${String(h.getDate()).padStart(2, "0")}/${String(h.getMonth() + 1).padStart(2, "0")}/${h.getFullYear()}`;
+        }
+        setTimeout(() => $("#f-medidas").focus(), 50);
+      }
+
+      async function salvar() {
+        const reg = {
+          cod_oc: $("#f-cod").value.trim(),
+          atendimento: $("#f-at").value.trim(),
+          cidade: $("#f-cidade-in").value.trim().toUpperCase(),
+          material: $("#f-material-in").value.trim().toUpperCase(),
+          rua: $("#f-rua").value.trim(),
+          exec_man: brToISO($("#f-execman").value),
+          status: $("#f-status-in").value,
+          equipe: $("#f-equipe").value.trim(),
+          data_execucao: brToISO($("#f-dataexec").value),
+          medidas: $("#f-medidas").value.trim(),
+          observacoes: $("#f-obs").value.trim(),
+        };
+        const id = $("#f-id").value;
+        let res;
+        if (id) res = await db.from(TABELA).update(reg).eq("id", id);
+        else res = await db.from(TABELA).insert(reg);
+        if (res.error) {
+          toast("Erro ao salvar: " + res.error.message);
+          return;
+        }
+        fecharModal();
+        toast(id ? "OS atualizada" : "OS cadastrada");
+        load();
+      }
+
+      async function excluir() {
+        const id = $("#f-id").value;
+        if (!id) return;
+        if (!confirm("Excluir esta OS? Não dá pra desfazer.")) return;
+        const o = ordens.find((x) => x.id === id);
+        if (o && o.pdf_path) {
+          await db.storage.from(BUCKET).remove([o.pdf_path]);
+        }
+        const { error } = await db.from(TABELA).delete().eq("id", id);
+        if (error) {
+          toast("Erro: " + error.message);
+          return;
+        }
+        fecharModal();
+        toast("OS excluída");
+        load();
+      }
+
+      async function removerPdf(id) {
+        const o = ordens.find((x) => x.id === id);
+        if (!o) return;
+        if (!confirm("Remover o PDF desta OS?")) return;
+        if (o.pdf_path) {
+          const { error: se } = await db.storage
+            .from(BUCKET)
+            .remove([o.pdf_path]);
+          if (se) {
+            toast("Erro ao apagar o arquivo: " + se.message);
+            return;
+          }
+        }
+        const { error } = await db
+          .from(TABELA)
+          .update({ pdf_url: null, pdf_path: null })
+          .eq("id", id);
+        if (error) {
+          toast("Erro ao remover: " + error.message);
+          return;
+        }
+        toast("PDF removido");
+        load();
+      }
+
+      async function whatsapp(id) {
+        const o = ordens.find((x) => x.id === id);
+        if (!o) return;
+        const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(
+          navigator.userAgent || "",
+        );
+        const marcar = async () => {
+          if (o.status === "Pendente") {
+            await db.from(TABELA).update({ status: "Enviado" }).eq("id", id);
+          }
+          load();
+        };
+
+        // mensagem: só código / rua e cidade / tipo de serviço (cada um numa linha)
+        const ruaCidade = [o.rua, o.cidade].filter(Boolean).join(" - ");
+        const msg = [o.cod_oc || "", ruaCidade, o.material || ""]
+          .filter(Boolean)
+          .join("\n");
+
+        // nome do arquivo: numero - cidade, tipo de serviço
+        const partesNome = [
+          o.cod_oc,
+          [o.cidade, o.material].filter(Boolean).join(", "),
+        ]
+          .filter(Boolean)
+          .join(" - ");
+        const nomeArq =
+          (partesNome || "pavimento").replace(/[\/\\:*?"<>|]/g, " ").trim() +
+          ".pdf";
+
+        // No celular, com PDF: manda o arquivo de verdade pela folha de compartilhar
+        if (o.pdf_url && mobile && typeof navigator.canShare === "function") {
+          try {
+            const blob = await (await fetch(o.pdf_url)).blob();
+            const file = new File([blob], nomeArq, { type: "application/pdf" });
+            if (navigator.canShare({ files: [file] })) {
+              await navigator.share({ files: [file], text: msg });
+              await marcar();
+              return;
+            }
+          } catch (err) {
+            if (err && err.name === "AbortError") return;
+          } // cancelou: não faz nada
+        }
+
+        // Fallback (computador ou sem suporte a anexo): mesma info + link do PDF
+        const L = [msg];
+        if (o.pdf_url) {
+          L.push("");
+          L.push(`📄 PDF: ${o.pdf_url}`);
+        }
+        window.open(
+          "https://wa.me/?text=" + encodeURIComponent(L.join("\n")),
+          "_blank",
+        );
+        await marcar();
+      }
+
+      // ---------- PDF ----------
+      function anexarPdf(id) {
+        editingPdfFor = id;
+        $("#pdf-input").click();
+      }
+      $("#pdf-input").addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        e.target.value = "";
+        if (!file || !editingPdfFor) return;
+        const id = editingPdfFor;
+        const o = ordens.find((x) => x.id === id);
+        toast("Enviando PDF…");
+        if (o && o.pdf_path) {
+          await db.storage.from(BUCKET).remove([o.pdf_path]);
+        } // tira o anterior
+        const path = `${id}/${Date.now()}.pdf`; // nome único = sem problema de cache
+        const up = await db.storage
+          .from(BUCKET)
+          .upload(path, file, { contentType: "application/pdf" });
+        if (up.error) {
+          toast("Erro no upload: " + up.error.message);
+          return;
+        }
+        const { data } = db.storage.from(BUCKET).getPublicUrl(path);
+        const { error } = await db
+          .from(TABELA)
+          .update({ pdf_url: data.publicUrl, pdf_path: path })
+          .eq("id", id);
+        if (error) {
+          toast("PDF subiu, mas falhou salvar o link: " + error.message);
+          return;
+        }
+        // lê o endereço do PDF e preenche a Rua, se ainda estiver vazia
+        if (o && !o.rua) {
+          try {
+            const rua = await extrairRua(file);
+            if (rua) {
+              await db.from(TABELA).update({ rua }).eq("id", id);
+            }
+          } catch (_) {
+            /* sem endereço: segue com a Rua vazia */
+          }
+        }
+        toast("PDF anexado");
+        load();
+      });
+
+      // Extrai o logradouro (rua + número) do texto do PDF da ordem de serviço
+      async function extrairRua(file) {
+        if (typeof pdfjsLib === "undefined") return "";
+        const buf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        const page = await pdf.getPage(1);
+        const tc = await page.getTextContent();
+        const full = tc.items
+          .map((i) => i.str)
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
+        const m = full.match(
+          /((?:R\.|RUA|AV\.|AVENIDA|TRAV\.|TRAVESSA|PRA[ÇC]A|P[ÇC]A?\.?|ROD\.|RODOVIA|ESTR\.|ESTRADA|ALAMEDA|AL\.|LADEIRA|LARGO|BECO|CONJ\.|CONJUNTO|LOTEAMENTO)\s+.{0,180}?)(?:\s*\(-?\d|\s+Tipo da Manuten|\s+Setor\b|\s+Descri[çc][ãa]o|$)/i,
+        );
+        if (!m) return "";
+        // fica só com rua + número (antes do " - " que separa o bairro)
+        return m[1]
+          .split(" - ")[0]
+          .trim()
+          .replace(/[,\s]+$/, "");
+      }
+
+      // ---------- importar colando ----------
+      function abrirImport() {
+        $("#import-text").value = "";
+        $("#modal-import").classList.add("open");
+      }
+      function fecharImport() {
+        $("#modal-import").classList.remove("open");
+      }
+
+      // Importa localizando cada coluna pelo CONTEÚDO (não pela posição),
+      // então coluna vazia no meio da seleção não bagunça o mapeamento.
+      async function importar() {
+        const linhas = $("#import-text")
+          .value.split("\n")
+          .map((l) => l.replace(/\r$/, ""))
+          .filter((l) => l.trim());
+        if (!linhas.length) {
+          toast("Cole as linhas primeiro");
+          return;
+        }
+        const regs = [];
+        let ignoradas = 0;
+        const ehData = (x) => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(x);
+        for (const l of linhas) {
+          const c = l.split("\t").map((s) => s.trim());
+          const si = c.findIndex((x) => /^(pendent|execut)/i.test(x)); // âncora: status
+          const cod = c.find((x) => /ES\s*\d{2}\s*-?\s*\d/i.test(x)); // código ES…
+          if (si < 0 && !cod) {
+            ignoradas++;
+            continue;
+          } // linha sem âncora
+          const reg = {
+            exec_man: null,
+            cod_oc: "",
+            atendimento: "",
+            vencimento: null,
+            data_execucao: null,
+            equipe: "",
+            status: "Pendente",
+            cidade: "",
+            material: "",
+            observacoes: "",
+          };
+          if (si >= 0) {
+            reg.status = /execut/i.test(c[si]) ? "Executado" : "Pendente";
+            reg.cidade = (c[si + 1] || "").toUpperCase();
+            reg.material = (c[si + 2] || "").toUpperCase();
+            reg.observacoes = c
+              .slice(si + 3)
+              .filter(Boolean)
+              .join(" ");
+          }
+          if (cod) reg.cod_oc = cod.replace(/\s+/g, "");
+          const ate = si >= 0 ? si : c.length; // só olha o que vem antes do status
+          const datas = c.slice(0, ate).filter(ehData);
+          reg.exec_man = brToISO(datas[0] || ""); // 1ª data = exec. manutenção
+          reg.vencimento = brToISO(datas[1] || ""); // 2ª data = vencimento
+          if (datas[2]) reg.data_execucao = brToISO(datas[2]); // 3ª data = execução
+          const at = c.slice(0, ate).find((x) => /^\d{5,7}$/.test(x));
+          if (at) reg.atendimento = at;
+          if (si >= 0 && !reg.data_execucao) {
+            // texto solto antes do status = nome da equipe
+            for (let i = 0; i < si; i++) {
+              const x = c[i];
+              if (x && !/^\d/.test(x) && !/^ES\s*\d{2}/i.test(x))
+                reg.equipe = x;
+            }
+          }
+          regs.push(reg);
+        }
+        if (!regs.length) {
+          toast("Não reconheci nenhuma linha");
+          return;
+        }
+        const { error } = await db.from(TABELA).insert(regs);
+        if (error) {
+          toast("Erro ao importar: " + error.message);
+          return;
+        }
+        fecharImport();
+        toast(
+          `${regs.length} OS importadas${ignoradas ? ` · ${ignoradas} ignoradas` : ""}`,
+        );
+        load();
+      }
+
+      // ---------- eventos ----------
+      ["q", "f-status", "f-cidade", "f-material"].forEach((id) =>
+        $("#" + id).addEventListener("input", render),
+      );
+      $("#btn-new").onclick = novaOS;
+      $("#btn-save").onclick = salvar;
+      $("#btn-cancel").onclick = fecharModal;
+      $("#btn-delete").onclick = excluir;
+      $("#btn-import").onclick = abrirImport;
+      $("#import-go").onclick = importar;
+      $("#import-cancel").onclick = fecharImport;
+      $("#modal-edit").addEventListener("click", (e) => {
+        if (e.target.id === "modal-edit") fecharModal();
+      });
+      $("#modal-import").addEventListener("click", (e) => {
+        if (e.target.id === "modal-import") fecharImport();
+      });
+      window.anexarPdf = anexarPdf;
+      window.editar = editar;
+      window.marcarExecutado = marcarExecutado;
+      window.removerPdf = removerPdf;
+      window.whatsapp = whatsapp;
+
+      load();
+    </script>
+  </body>
+</html>
