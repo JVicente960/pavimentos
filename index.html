@@ -1081,40 +1081,76 @@
           toast("PDF subiu, mas falhou salvar o link: " + error.message);
           return;
         }
-        // lê o endereço do PDF e preenche a Rua, se ainda estiver vazia
-        if (o && !o.rua) {
+        // lê o endereço do PDF e atualiza a Rua sempre que encontrar (re-anexar corrige)
+        if (o) {
           try {
             const rua = await extrairRua(file);
             if (rua) {
               await db.from(TABELA).update({ rua }).eq("id", id);
             }
           } catch (_) {
-            /* sem endereço: segue com a Rua vazia */
+            /* sem endereço: mantém a Rua atual */
           }
         }
         toast("PDF anexado");
         load();
       });
 
-// Extrai o logradouro (rua + número) do texto do PDF da ordem de serviço
-  async function extrairRua(file){
-  if(typeof pdfjsLib==="undefined") return "";
-  const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
-  const page = await pdf.getPage(1);
-  const tc = await page.getTextContent();
-  const full = tc.items.map(i=>i.str).join(" ").replace(/\s+/g," ").trim();
-  const m = full.match(/((?:R\.|RUA|AV\.|AVENIDA|TRAV\.|TRAVESSA|PRA[ÇC]A|P[ÇC]A?\.?|ROD\.|RODOVIA|ESTR\.|ESTRADA|ALAMEDA|AL\.|LADEIRA|LARGO|BECO|CONJ\.|CONJUNTO|LOTEAMENTO)\s+.{0,180}?)(?:\s*\(-?\d|\s+Tipo da Manuten|\s+Setor\b|\s+Descri[çc][ãa]o|$)/i);
-  if(!m) return "";
-  // mantém rua + número + bairro; corta cidade/UF, CEP, país e coordenadas do final
-  return m[1]
-    .replace(/\s*\(.*$/,"")                          // coordenadas
-    .replace(/,\s*[^,]+\s+-\s+[A-Za-z]{2}\b.*$/,"")  // ", Cidade - UF" e o que vier depois
-    .replace(/,?\s*\d{5}-?\d{3}.*$/i,"")             // CEP (se ainda sobrar)
-    .replace(/,?\s*Bra[sz]il\.?\s*$/i,"")            // país
-    .replace(/[,\s-]+$/,"")                           // pontuação solta no fim
-    .trim();
-}
+      // Extrai rua + número + bairro do PDF da ordem de serviço
+      async function extrairRua(file) {
+        if (typeof pdfjsLib === "undefined") return "";
+        const buf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        const page = await pdf.getPage(1);
+        const tc = await page.getTextContent();
+
+        // reconstrói as linhas pela posição: mesma altura = mesma linha, ordenada da esquerda p/ direita
+        const grupos = {};
+        tc.items.forEach((it) => {
+          const y = Math.round(it.transform[5]);
+          (grupos[y] = grupos[y] || []).push(it);
+        });
+        const linhas = Object.keys(grupos)
+          .sort((a, b) => b - a)
+          .map((y) =>
+            grupos[y]
+              .sort((a, b) => a.transform[4] - b.transform[4])
+              .map((i) => i.str)
+              .join(""),
+          )
+          .map((s) => s.replace(/\s+/g, " ").trim())
+          .filter(Boolean);
+
+        // endereço = linha logo após o rótulo "Endereço" (ou a própria, se vierem juntas)
+        let addr = "";
+        for (let i = 0; i < linhas.length; i++) {
+          if (/^Endere[çc]o\b/i.test(linhas[i])) {
+            addr =
+              linhas[i].replace(/^Endere[çc]o\s*/i, "").trim() ||
+              (linhas[i + 1] || "").trim();
+            if (addr) break;
+          }
+        }
+        // reserva: alguma linha com cara de logradouro
+        if (!addr) {
+          addr =
+            linhas.find((l) =>
+              /^(R\.|RUA|AV\.|AVENIDA|TRAV\.|TRAVESSA|PRA[ÇC]A|P[ÇC]A?\.?|ROD\.|RODOVIA|ESTR\.|ESTRADA|ALAMEDA|AL\.|LADEIRA|LARGO|BECO|CONJ\.|CONJUNTO|LOTEAMENTO)\s/i.test(
+                l,
+              ),
+            ) || "";
+        }
+        if (!addr) return "";
+
+        // mantém rua + número + bairro; corta cidade/UF, CEP, país e coordenadas do final
+        return addr
+          .replace(/\s*\(.*$/, "")
+          .replace(/,\s*[^,]+\s+-\s+[A-Za-z]{2}\b.*$/, "")
+          .replace(/,?\s*\d{5}-?\d{3}.*$/i, "")
+          .replace(/,?\s*Bra[sz]il\.?\s*$/i, "")
+          .replace(/[,\s-]+$/, "")
+          .trim();
+      }
 
       // ---------- importar colando ----------
       function abrirImport() {
