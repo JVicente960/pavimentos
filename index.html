@@ -1096,28 +1096,25 @@
         load();
       });
 
-      // Extrai o logradouro (rua + número) do texto do PDF da ordem de serviço
-      async function extrairRua(file) {
-        if (typeof pdfjsLib === "undefined") return "";
-        const buf = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-        const page = await pdf.getPage(1);
-        const tc = await page.getTextContent();
-        const full = tc.items
-          .map((i) => i.str)
-          .join(" ")
-          .replace(/\s+/g, " ")
-          .trim();
-        const m = full.match(
-          /((?:R\.|RUA|AV\.|AVENIDA|TRAV\.|TRAVESSA|PRA[ÇC]A|P[ÇC]A?\.?|ROD\.|RODOVIA|ESTR\.|ESTRADA|ALAMEDA|AL\.|LADEIRA|LARGO|BECO|CONJ\.|CONJUNTO|LOTEAMENTO)\s+.{0,180}?)(?:\s*\(-?\d|\s+Tipo da Manuten|\s+Setor\b|\s+Descri[çc][ãa]o|$)/i,
-        );
-        if (!m) return "";
-        // fica só com rua + número (antes do " - " que separa o bairro)
-        return m[1]
-          .split(" - ")[0]
-          .trim()
-          .replace(/[,\s]+$/, "");
-      }
+// Extrai o logradouro (rua + número) do texto do PDF da ordem de serviço
+  async function extrairRua(file){
+  if(typeof pdfjsLib==="undefined") return "";
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  const page = await pdf.getPage(1);
+  const tc = await page.getTextContent();
+  const full = tc.items.map(i=>i.str).join(" ").replace(/\s+/g," ").trim();
+  const m = full.match(/((?:R\.|RUA|AV\.|AVENIDA|TRAV\.|TRAVESSA|PRA[ÇC]A|P[ÇC]A?\.?|ROD\.|RODOVIA|ESTR\.|ESTRADA|ALAMEDA|AL\.|LADEIRA|LARGO|BECO|CONJ\.|CONJUNTO|LOTEAMENTO)\s+.{0,180}?)(?:\s*\(-?\d|\s+Tipo da Manuten|\s+Setor\b|\s+Descri[çc][ãa]o|$)/i);
+  if(!m) return "";
+  // mantém rua + número + bairro; corta cidade/UF, CEP, país e coordenadas do final
+  return m[1]
+    .replace(/\s*\(.*$/,"")                          // coordenadas
+    .replace(/,\s*[^,]+\s+-\s+[A-Za-z]{2}\b.*$/,"")  // ", Cidade - UF" e o que vier depois
+    .replace(/,?\s*\d{5}-?\d{3}.*$/i,"")             // CEP (se ainda sobrar)
+    .replace(/,?\s*Bra[sz]il\.?\s*$/i,"")            // país
+    .replace(/[,\s-]+$/,"")                           // pontuação solta no fim
+    .trim();
+}
 
       // ---------- importar colando ----------
       function abrirImport() {
