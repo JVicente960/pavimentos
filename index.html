@@ -776,14 +776,7 @@
           if (fc && o.cidade !== fc) return false;
           if (fm && o.material !== fm) return false;
           if (q) {
-            const blob = [
-              o.cod_oc,
-              o.atendimento,
-              o.cidade,
-              o.material,
-              o.observacoes,
-              o.equipe,
-            ]
+            const blob = [o.cod_oc,o.atendimento,o.cidade,o.material,o.observacoes,o.equipe,o.rua]
               .filter(Boolean)
               .join(" ")
               .toLowerCase();
